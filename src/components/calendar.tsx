@@ -67,9 +67,9 @@ const Calendar = () => {
   const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
   const [isViewTasksDialogOpen, setIsViewTasksDialogOpen] = useState(false);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
-  const [selectedRange, setSelectedRange] = useState<{ start: Date; end: Date } | null>(null); // new
-  const [isDraggingToSelect, setIsDraggingToSelect] = useState(false); // new
-  const [dragStartDate, setDragStartDate] = useState<Date | null>(null); // new
+  const [selectedRange, setSelectedRange] = useState<{ start: Date; end: Date } | null>(null);
+  const [isDraggingToSelect, setIsDraggingToSelect] = useState(false);
+  const [dragStartDate, setDragStartDate] = useState<Date | null>(null);
   const { addTask: saveTask, getTasksByDate, updateTask, deleteTask } = useTasks();
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -241,7 +241,7 @@ const Calendar = () => {
     setIsDraggingToSelect(false);
     setDragStartDate(null);
     if (selectedRange) {
-      setSelectedDate(selectedRange.start); // anchor for form
+      setSelectedDate(selectedRange.start); 
       setIsAddTaskDialogOpen(true);
     }
   };
@@ -251,8 +251,8 @@ const Calendar = () => {
     document.addEventListener('mouseup', up);
     return () => document.removeEventListener('mouseup', up);
   }, [isDraggingToSelect, selectedRange]);
-  // --- end drag-to-select ---
 
+  
   // Helper to test date in range
   const isDateInSelectedRange = (date: Date) => {
     if (!selectedRange) return false;

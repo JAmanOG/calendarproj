@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 
 export interface Task {
   id: string;
-  date: string; // canonical single date (start if range)
+  date: string; 
   startDate?: string;
   endDate?: string;
   name: string;
@@ -166,7 +166,6 @@ function useTasksStore(): TasksStore {
 }
 
 export const TasksProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Call our custom hook directly (no useMemo) to satisfy Rules of Hooks
   const store = useTasksStore();
   return <TasksContext.Provider value={store}>{children}</TasksContext.Provider>;
 };
