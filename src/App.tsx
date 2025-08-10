@@ -1,14 +1,17 @@
 import Calendar from './components/calendar'
 import './App.css'
 import Layout from './components/layout'
+import { TasksProvider } from './lib/useTasks'
 
 function App() {
 
   return (
     <>
-    <Layout>
-      <Calendar/>
-    </Layout>
+        <TasksProvider>
+          <Layout>
+            <Calendar/>
+          </Layout>
+        </TasksProvider>
     </>
   )
 }

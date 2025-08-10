@@ -264,7 +264,7 @@ const Calendar = () => {
       const isCurrentMonth = format(date, "M") === format(currentDate, "M");
       const isTodayDate = isToday(date);
       const dateTasks = getTasksByDate(date);
-      console.log("dateTasks", dateTasks); 
+
       const inRange = isDateInSelectedRange(date); 
 
       return (

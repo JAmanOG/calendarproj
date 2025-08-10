@@ -10,7 +10,9 @@ import type { Task } from '@/lib/useTasks'
 
 const Sidebar = () => {
   const { filters, updateFilters, resetFilters, getFilteredTasks } = useTasks();
+  console.log("Sidebar filters", filters);
   const filteredTasks = getFilteredTasks();
+  console.log("Filtered tasks", filteredTasks);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     updateFilters({ searchQuery: e.target.value });
