@@ -10,10 +10,7 @@ import {
   startOfWeek,
   subMonths,
 } from "date-fns";
-import { MoveLeft, MoveRight } from "lucide-react";
 import {
-  DndContext,
-  DragOverlay,
   closestCenter,
   KeyboardSensor,
   PointerSensor,
@@ -54,6 +51,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import CalendarHeader from "./calender/CalendarHeader";
+import CalendarGrid from "./calender/CalendarGrid";
 
 // Helper utilities for date-only comparison and math
 const toDateOnly = (d: Date | string) => new Date((typeof d === 'string' ? d : d.toISOString()).split('T')[0]);
@@ -70,15 +69,14 @@ const Calendar = () => {
   const [selectedRange, setSelectedRange] = useState<{ start: Date; end: Date } | null>(null);
   const [isDraggingToSelect, setIsDraggingToSelect] = useState(false);
   const [dragStartDate, setDragStartDate] = useState<Date | null>(null);
+  const [mouseDownPoint, setMouseDownPoint] = useState<{x:number;y:number}|null>(null);
   const { addTask: saveTask, getTasksByDate, updateTask, deleteTask } = useTasks();
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   // Configure drag and drop sensors
   const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+    useSensor(LongPressPointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   const monthStart = startOfMonth(currentDate);
@@ -224,14 +222,19 @@ const Calendar = () => {
 
   // --- Drag-to-select handlers ---
   const handleDateMouseDown = (date: Date, e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('[data-task-element]')) return; // ignore when clicking a task
-    e.preventDefault();
+    if ((e.target as HTMLElement).closest('[data-task-element]')) return;
+    setMouseDownPoint({ x: e.clientX, y: e.clientY });
     setIsDraggingToSelect(true);
     setDragStartDate(date);
-    setSelectedRange({ start: date, end: date });
+    // Do NOT set selectedRange yet; wait until movement threshold surpassed
   };
-  const handleDateMouseEnter = (date: Date) => {
-    if (!isDraggingToSelect || !dragStartDate) return;
+  const handleDateMouseEnter = (date: Date, e?: React.MouseEvent) => {
+    if (!isDraggingToSelect || !dragStartDate || !mouseDownPoint) return;
+    if (e) {
+      const dx = Math.abs(e.clientX - mouseDownPoint.x);
+      const dy = Math.abs(e.clientY - mouseDownPoint.y);
+      if (dx < 4 && dy < 4) return; // still a click, not range select
+    }
     const start = dragStartDate < date ? dragStartDate : date;
     const end = dragStartDate < date ? date : dragStartDate;
     setSelectedRange({ start, end });
@@ -240,9 +243,13 @@ const Calendar = () => {
     if (!isDraggingToSelect) return;
     setIsDraggingToSelect(false);
     setDragStartDate(null);
+    setMouseDownPoint(null);
     if (selectedRange) {
-      setSelectedDate(selectedRange.start); 
-      setIsAddTaskDialogOpen(true);
+      // If no range expansion occurred (single day) we rely on normal click handler to open dialog
+      if (selectedRange.start.getTime() !== selectedRange.end.getTime()) {
+        setSelectedDate(selectedRange.start);
+        setIsAddTaskDialogOpen(true);
+      }
     }
   };
 
@@ -276,7 +283,7 @@ const Calendar = () => {
           tasks={dateTasks}
           onClick={() => handleDateClick(date)}
           onMouseDown={(e)=>handleDateMouseDown(date,e)}
-          onMouseEnter={()=>handleDateMouseEnter(date)}
+          onMouseEnter={(e)=>handleDateMouseEnter(date,e)}
           inSelectedRange={inRange}
         />
       );
@@ -527,65 +534,10 @@ const Calendar = () => {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <div className="bg-gray-700 text-white p-6">
-        {addTaskDialog()}
-        {viewTasksDialog()}
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <button
-            onClick={previousMonth}
-            className="p-3 hover:bg-gray-600 rounded-lg transition-colors text-2xl"
-          >
-            <MoveLeft />
-          </button>
-          <h2 className="text-3xl font-semibold">
-            {format(currentDate, "MMMM yyyy")}
-          </h2>
-          <button
-            onClick={nextMonth}
-            className="p-3 hover:bg-gray-600 rounded-lg transition-colors text-2xl"
-          >
-            <MoveRight />
-          </button>
-        </div>
-      </div>
-
+      <CalendarHeader addTaskDialog={addTaskDialog} viewTasksDialog={viewTasksDialog} previousMonth={previousMonth} currentDate={currentDate} nextMonth={nextMonth}/>
+      
       {/* Calendar Grid */}
-      <div className="p-6 max-w-7xl mx-auto">
-        {/* Day names */}
-        <div className="grid select-none grid-cols-7 mb-4">
-          {dayNames.map((day) => (
-            <div
-              key={day}
-              className="p-4 text-center text-lg font-medium text-gray-500"
-            >
-              {day}
-            </div>
-          ))}
-        </div>
-
-        {/* Calendar days */}
-        <DndContext
-          sensors={sensors}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          collisionDetection={closestCenter}
-        >
-          <div className="grid grid-cols-7 gap-2">
-            {renderCalendarDays()}
-          </div>
-
-          <DragOverlay>
-            {activeTask ? (
-              <div
-                className="bg-white border rounded-lg p-4 shadow-md"
-                style={{ opacity: 0.9 }}
-              >
-                {activeTask.name}
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-      </div>
+      <CalendarGrid dayNames={dayNames} sensors={sensors} handleDragStart={handleDragStart} handleDragEnd={handleDragEnd} activeTask={activeTask} renderCalendarDays={renderCalendarDays} closestCenter={closestCenter}/>
     </div>
   );
 };
@@ -641,7 +593,7 @@ const DraggableTask = ({ task, cellDate, onClick, draggable = true }: DraggableT
               onClick={(e) => { e.stopPropagation(); onClick?.(e); }}
               className={`
                 px-2 py-1 text-xs font-medium truncate text-white transition-all duration-200 hover:shadow-md select-none
-                ${isDraggable ? 'cursor-grab' : 'cursor-default opacity-80'}
+                ${isDraggable ? (isDragging ? 'cursor-grabbing' : 'cursor-pointer') : 'cursor-default opacity-80'}
                 ${isDragging ? 'opacity-50 scale-105 z-50' : 'opacity-100'}
                 ${color}
                 ${isStart ? 'rounded-l-md' : 'rounded-l-none'}
@@ -705,9 +657,9 @@ interface DroppableCalendarDayProps {
   isTodayDate: boolean;
   tasks: Task[];
   onClick: () => void;
-  onMouseDown?: (e: React.MouseEvent)=>void; // new
-  onMouseEnter?: ()=>void; // new
-  inSelectedRange?: boolean; // new
+  onMouseDown?: (e: React.MouseEvent)=>void;
+  onMouseEnter?: (e: React.MouseEvent)=>void;
+  inSelectedRange?: boolean;
 }
 
 const DroppableCalendarDay = ({ 
@@ -761,7 +713,7 @@ const DroppableCalendarDay = ({
       {/* Task strips */}
       <div className="flex-1 space-y-1 overflow-hidden group">
         {tasks.slice(0, 4).map((task) => (
-          <DraggableTask key={`${task.id}-${date.toISOString()}`} task={task} cellDate={date} />
+          <DraggableTask key={`${task.id}-${date.toISOString()}`} task={task} cellDate={date} onClick={() => onClick()} />
         ))}
         {tasks.length > 4 && (
           <div className="px-2 py-1 bg-gray-400 text-white rounded text-xs font-medium">
@@ -782,6 +734,39 @@ const DroppableCalendarDay = ({
     </div>
   );
 };
+
+// TODO: Ai code not working have to see later
+class LongPressPointerSensor extends PointerSensor {
+  static activators = [
+    {
+      eventName: 'onPointerDown' as const,
+      handler: ({ nativeEvent: event }: any, { onActivation }: any) => {
+        if (!event || event.button !== 0) {
+          return false; // only left click
+        }
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const timeoutId = window.setTimeout(() => {
+          onActivation(event);
+        }, 3000); // 3s hold required for drag activation
+        const clear = () => {
+          clearTimeout(timeoutId);
+          window.removeEventListener('pointerup', handleUp, true);
+          window.removeEventListener('pointermove', handleMove, true);
+        };
+        const handleUp = () => { clear(); };
+        const handleMove = (e: PointerEvent) => {
+          if (Math.abs(e.clientX - startX) > 5 || Math.abs(e.clientY - startY) > 5) {
+            clear(); // cancel if moved too far before activation
+          }
+        };
+        window.addEventListener('pointerup', handleUp, true);
+        window.addEventListener('pointermove', handleMove, true);
+        return true;
+      },
+    },
+  ];
+}
 
 export default Calendar;
 
