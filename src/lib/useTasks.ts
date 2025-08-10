@@ -13,10 +13,21 @@ export interface Task {
   createdAt: string;
 }
 
+export interface TaskFilters {
+  categories: ('todo' | 'progress' | 'review' | 'completed')[];
+  timeWindow: 'all' | '1week' | '2weeks' | '3weeks';
+  searchQuery: string;
+}
+
 const TASKS_STORAGE_KEY = 'calendar-tasks';
 
 export const useTasks = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [filters, setFilters] = useState<TaskFilters>({
+    categories: ['todo', 'progress', 'review', 'completed'],
+    timeWindow: 'all',
+    searchQuery: '',
+  });
 
   // Load tasks from localStorage on mount
   useEffect(() => {
@@ -57,27 +68,95 @@ export const useTasks = () => {
     return newTask;
   };
 
+  // In useTasks hook
   const updateTask = (id: string, updates: Partial<Omit<Task, 'id' | 'createdAt'>>) => {
     setTasks(prevTasks =>
       prevTasks.map(task => {
         if (task.id !== id) return task;
-        const updated: Task = { ...task, ...updates } as Task;
-        // Keep 'date' in sync with startDate when range exists
-        if (updated.startDate) {
-          updated.date = updated.startDate;
-        }
+        
+        // When collapsing to single day, clear range dates
+        const newStart = updates.startDate;
+        const newEnd = updates.endDate;
+        const isCollapsing = newStart && newEnd && newStart === newEnd;
+        
+        const updated: Task = { 
+          ...task,
+          ...updates,
+          // Clear range when dates match
+          ...(isCollapsing ? { startDate: undefined, endDate: undefined } : {})
+        } as Task;
+        
         return updated;
       })
     );
   };
-
   const deleteTask = (id: string) => {
     setTasks(prevTasks => prevTasks.filter(task => task.id !== id));
   };
 
+  const updateFilters = (newFilters: Partial<TaskFilters>) => {
+    setFilters(prev => ({ ...prev, ...newFilters }));
+  };
+
+  const resetFilters = () => {
+    setFilters({
+      categories: ['todo', 'progress', 'review', 'completed'],
+      timeWindow: 'all',
+      searchQuery: '',
+    });
+  };
+
+  const getFilteredTasks = () => {
+    const now = new Date();
+    const oneWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const twoWeeks = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+    const threeWeeks = new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000);
+
+    return tasks.filter(task => {
+      // Category filter
+      if (!filters.categories.includes(task.category)) {
+        return false;
+      }
+
+      // Search filter
+      if (filters.searchQuery && !task.name.toLowerCase().includes(filters.searchQuery.toLowerCase())) {
+        return false;
+      }
+
+      // Time window filter
+      if (filters.timeWindow !== 'all') {
+        const taskStart = new Date(task.startDate ?? task.date);
+        
+        let cutoffDate: Date;
+        switch (filters.timeWindow) {
+          case '1week':
+            cutoffDate = oneWeek;
+            break;
+          case '2weeks':
+            cutoffDate = twoWeeks;
+            break;
+          case '3weeks':
+            cutoffDate = threeWeeks;
+            break;
+          default:
+            cutoffDate = now;
+        }
+
+        // Task should start within the time window
+        if (taskStart > cutoffDate) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  };
+
   const getTasksByDate = (date: Date) => {
     const target = date.toISOString().split('T')[0];
-    return tasks.filter(task => {
+    const filteredTasks = getFilteredTasks();
+    
+    return filteredTasks.filter(task => {
       // If task has a date range, include if date falls within [startDate, endDate]
       if (task.startDate || task.endDate) {
         const start = new Date(task.startDate ?? task.date);
@@ -106,5 +185,9 @@ export const useTasks = () => {
     deleteTask,
     getTasksByDate,
     clearAllTasks,
+    filters,
+    updateFilters,
+    resetFilters,
+    getFilteredTasks,
   };
 };

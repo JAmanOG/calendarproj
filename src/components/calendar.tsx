@@ -48,6 +48,12 @@ import { Button } from "@/components/ui/button";
 import { useTasks } from "@/lib/useTasks";
 import type { Task } from "@/lib/useTasks";
 import { useDraggable, useDroppable } from '@dnd-kit/core';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // Helper utilities for date-only comparison and math
 const toDateOnly = (d: Date | string) => new Date((typeof d === 'string' ? d : d.toISOString()).split('T')[0]);
@@ -258,7 +264,8 @@ const Calendar = () => {
       const isCurrentMonth = format(date, "M") === format(currentDate, "M");
       const isTodayDate = isToday(date);
       const dateTasks = getTasksByDate(date);
-      const inRange = isDateInSelectedRange(date); // new
+      console.log("dateTasks", dateTasks); 
+      const inRange = isDateInSelectedRange(date); 
 
       return (
         <DroppableCalendarDay
@@ -596,7 +603,11 @@ const DraggableTask = ({ task, cellDate, onClick, draggable = true }: DraggableT
   const cell = toDateOnly(cellDate);
   const isStart = isoDateOnly(start) === isoDateOnly(cell);
   const isEnd = isoDateOnly(end) === isoDateOnly(cell);
-
+  const isSingleDay = !task.startDate && !task.endDate;
+  const isDraggable = draggable;
+  const showLeftHandle = (isStart || isSingleDay) && isDraggable;
+  const showRightHandle = (isEnd || isSingleDay) && isDraggable;
+  
   const {
     attributes: bodyAttrs,
     listeners: bodyListeners,
@@ -607,7 +618,6 @@ const DraggableTask = ({ task, cellDate, onClick, draggable = true }: DraggableT
   // Added missing draggable hooks for resize handles
   const { attributes: lsAttrs, listeners: lsListeners, setNodeRef: setLsRef } = useDraggable({ id: `resize-start:${task.id}` , disabled: !draggable});
   const { attributes: rsAttrs, listeners: rsListeners, setNodeRef: setRsRef } = useDraggable({ id: `resize-end:${task.id}` , disabled: !draggable});
-  const isDraggable = draggable;
   const isDragging = internalIsDragging && draggable;
 
   const style = bodyTransform ? { transform: `translate3d(${bodyTransform.x}px, ${bodyTransform.y}px, 0)` } : undefined;
@@ -619,49 +629,72 @@ const DraggableTask = ({ task, cellDate, onClick, draggable = true }: DraggableT
 
   return (
     <div className="relative" data-task-element>
-      {/* Segment body */}
-      <div
-        ref={setBodyRef}
-        style={style}
-        {...(isDraggable ? bodyListeners : {})}
-        {...(isDraggable ? bodyAttrs : {})}
-        onClick={(e) => { e.stopPropagation(); onClick?.(e); }}
-        className={`
-          px-2 py-1 text-xs font-medium truncate text-white transition-opacity duration-200 hover:shadow-sm select-none
-          ${isDraggable ? 'cursor-grab' : 'cursor-default opacity-80'}
-          ${isDragging ? 'opacity-50' : 'opacity-100'}
-          ${color}
-          ${isStart ? 'rounded-l-md' : 'rounded-l-none'}
-          ${isEnd ? 'rounded-r-md' : 'rounded-r-none'}
-        `}
-        title={`${task.name}${task.description ? ': ' + task.description : ''}`}
-      >
-        {task.name}
-      </div>
+      {/* Segment body with tooltip */}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              ref={setBodyRef}
+              style={style}
+              {...(isDraggable ? bodyListeners : {})}
+              {...(isDraggable ? bodyAttrs : {})}
+              onClick={(e) => { e.stopPropagation(); onClick?.(e); }}
+              className={`
+                px-2 py-1 text-xs font-medium truncate text-white transition-all duration-200 hover:shadow-md select-none
+                ${isDraggable ? 'cursor-grab' : 'cursor-default opacity-80'}
+                ${isDragging ? 'opacity-50 scale-105 z-50' : 'opacity-100'}
+                ${color}
+                ${isStart ? 'rounded-l-md' : 'rounded-l-none'}
+                ${isEnd ? 'rounded-r-md' : 'rounded-r-none'}
+              `}
+              title=""
+            >
+              {task.name}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">
+            <div className="space-y-1">
+              <p className="font-semibold">{task.name}</p>
+              {task.description && (
+                <p className="text-sm opacity-90">{task.description}</p>
+              )}
+              <div className="flex items-center gap-2 text-xs">
+                <div className={`w-2 h-2 rounded-full ${color}`}></div>
+                <span className="capitalize">
+                  {task.category === 'todo' ? 'To Do' : 
+                   task.category === 'progress' ? 'In Progress' : 
+                   task.category === 'review' ? 'Review' : 'Completed'}
+                </span>
+              </div>
+              {(task.startDate && task.endDate && task.startDate !== task.endDate) && (
+                <p className="text-xs opacity-75">
+                  {format(new Date(task.startDate), 'MMM d')} - {format(new Date(task.endDate), 'MMM d')}
+                </p>
+              )}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
-      {/* Left resize handle (only on start or single-day) */}
-      {(isStart || isoDateOnly(start) === isoDateOnly(end)) && isDraggable && (
-        <div
-          ref={setLsRef}
-          {...(isDraggable ? lsListeners : {})}
-          {...(isDraggable ? lsAttrs : {})}
-          onClick={(e) => e.stopPropagation()}
-          className={`absolute left-0 top-0 h-full w-2 cursor-col-resize select-none ${color}`}
-          style={{ borderTopLeftRadius: '0.375rem', borderBottomLeftRadius: '0.375rem', opacity: 0.9 }}
-        />
-      )}
+      {showLeftHandle && (
+  <div
+    ref={setLsRef}
+    {...lsListeners}
+    {...lsAttrs}
+    className={`absolute left-0 top-0 h-full w-2 cursor-col-resize ${color}`}
+    style={{ borderTopLeftRadius: '0.375rem', borderBottomLeftRadius: '0.375rem' }}
+  />
+)}
 
-      {/* Right resize handle (only on end or single-day) */}
-      {(isEnd || isoDateOnly(start) === isoDateOnly(end)) && isDraggable && (
-        <div
-          ref={setRsRef}
-          {...(isDraggable ? rsListeners : {})}
-          {...(isDraggable ? rsAttrs : {})}
-          onClick={(e) => e.stopPropagation()}
-          className={`absolute right-0 top-0 h-full w-2 cursor-col-resize select-none ${color}`}
-          style={{ borderTopRightRadius: '0.375rem', borderBottomRightRadius: '0.375rem', opacity: 0.9 }}
-        />
-      )}
+{showRightHandle && (
+  <div
+    ref={setRsRef}
+    {...rsListeners}
+    {...rsAttrs}
+    className={`absolute right-0 top-0 h-full w-2 cursor-col-resize ${color}`}
+    style={{ borderTopRightRadius: '0.375rem', borderBottomRightRadius: '0.375rem' }}
+  />
+)}
     </div>
   );
 };
